@@ -2,61 +2,56 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "nginx-webstore"
-        DOCKERHUB_USER = "skpdevops"
+        // 👇 Replace this with your Docker Hub username
+        IMAGE_NAME = "sahilkhan73/webstore"
+        // 👇 Jenkins credentials ID you’ll create for Docker Hub login
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub-token')
     }
 
     stages {
-        stage('Clone Repository') {
+        stage('Checkout') {
             steps {
-                echo "Cloning GitHub repository..."
+                echo "📥 Cloning GitHub repository..."
+                // 👇 Replace with your actual repo URL
                 git branch: 'main', url: 'https://github.com/Sahilkhan73/NginxWebStore_Jenkins.git'
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                echo "Building Docker image..."
-                sh 'docker build -t $IMAGE_NAME .'
-            }
-        }
-
-        stage('Test Image') {
-            steps {
-                echo "Testing Docker image..."
-                sh 'docker run -d --name test-nginx -p 9090:80 $IMAGE_NAME'
-                sh 'sleep 5'
-                sh 'curl -I http://16.171.28.22:9090 | grep "200 OK"'
-                sh 'docker stop test-nginx && docker rm test-nginx'
+                script {
+                    echo "🐳 Building Docker image..."
+                    dockerImage = docker.build("${IMAGE_NAME}:${BUILD_NUMBER}")
+                }
             }
         }
 
         stage('Push to Docker Hub') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
-                    sh 'docker tag $IMAGE_NAME $DOCKER_USER/$IMAGE_NAME:latest'
-                    sh 'docker push $DOCKER_USER/$IMAGE_NAME:latest'
+                script {
+                    echo "🚀 Pushing Docker image to Docker Hub..."
+                    docker.withRegistry('https://registry.hub.docker.com', 'dockerhub-token') {
+                        dockerImage.push("${BUILD_NUMBER}")
+                        dockerImage.push('latest')
+                    }
                 }
             }
         }
 
-        stage('Deploy Container') {
+        stage('Clean Up') {
             steps {
-                echo "Deploying latest image..."
-                sh 'docker stop nginx-container || true'
-                sh 'docker rm nginx-container || true'
-                sh 'docker run -d --name nginx-container -p 9090:80 $DOCKERHUB_USER/$IMAGE_NAME:latest'
+                echo "🧹 Cleaning up Docker images..."
+                sh 'docker rmi $(docker images -q) || true'
             }
         }
     }
 
     post {
         success {
-            echo '✅ Deployment successful!'
+            echo "✅ Successfully built and pushed ${IMAGE_NAME}:${BUILD_NUMBER} to Docker Hub!"
         }
         failure {
-            echo '❌ Pipeline failed!'
+            echo "❌ Build failed. Please check the Jenkins console output for details."
         }
     }
 }
