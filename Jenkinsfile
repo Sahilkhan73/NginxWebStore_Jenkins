@@ -4,7 +4,6 @@ pipeline {
     environment {
         IMAGE_NAME = "nginx-webstore"
         DOCKERHUB_USER = "skpdevops"
-        DOCKER_PASS = ""
     }
 
     stages {
